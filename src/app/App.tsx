@@ -7,8 +7,13 @@ import {
   Mail, X, SkipBack, SkipForward, PlayCircle, Sparkles, GraduationCap,
   Building2, Code2, FlaskConical, Globe, HelpCircle, LayersIcon,
 } from "lucide-react";
-import { checkBackend, getYouTubeMetadata, getYouTubeTranscript, generateAINotes } from "../services/api";
-
+import {
+  API_BASE_URL,
+  checkBackend,
+  getYouTubeMetadata,
+  getYouTubeTranscript,
+  generateAINotes
+} from "../services/api";
 /* ─── Warm cream · notebook palette ────────────────────────── */
 const C = {
   /* grounds */
@@ -905,7 +910,7 @@ function Dashboard({ onBack }: { onBack: () => void }) {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch("https://lecturelens-production-5dec.up.railway.app/api/video/upload", {
+      const response = await fetch(`${API_BASE_URL}/api/video/upload`, {
         method: "POST",
         body: formData,
       });
@@ -994,10 +999,14 @@ function Dashboard({ onBack }: { onBack: () => void }) {
         .filter(result => result.status === "rejected").length;
 
       if (failed === 3) {
-        setAnalysisError("Backend requests failed. Check that FastAPI is running on port 8000.");
-      } else if (failed > 0) {
-        setAnalysisError("Video loaded, but one or more AI endpoints failed. Check the browser console and backend terminal.");
-      }
+        setAnalysisError(
+        "Backend requests failed. Could not connect to the deployed API."
+      );
+    } else if (failed > 0) {
+        setAnalysisError(
+        "Video loaded, but one or more AI endpoints failed."
+       );
+    } 
 
       setActiveTab("notes");
     } catch (error) {
@@ -1142,8 +1151,8 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     }]);
 
     const endpoint = tool === "flashcards"
-      ? "http://127.0.0.1:8000/api/ai/flashcards"
-      : "http://127.0.0.1:8000/api/ai/quiz";
+      ? `${API_BASE_URL}/api/ai/flashcards`
+      : `${API_BASE_URL}/api/ai/quiz`;
 
     try {
       const response = await fetch(endpoint, {
@@ -1247,11 +1256,11 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     setChatLoading(true);
 
     try {
-      const response = await fetch("http://127.0.0.1:8000/api/ai/chat", {
+      const response = await fetch(`${API_BASE_URL}/api/ai/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: lectureUrl, question }),
-      });
+     });
 
       const data = await response.json().catch(() => ({}));
 
