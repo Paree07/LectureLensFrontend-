@@ -939,86 +939,231 @@ function Dashboard({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const handleAnalyze = async () => {
-    const cleanUrl = urlInput.trim();
+const handleAnalyze = async () => {
+  const cleanUrl = urlInput.trim();
 
-    if (!cleanUrl) {
-      alert("Please paste a YouTube URL");
-      return;
-    }
+  if (!cleanUrl) {
+    alert("Please paste a YouTube URL");
+    return;
+  }
 
-    if (!getYouTubeVideoId(cleanUrl)) {
-      alert("Please paste a valid YouTube URL");
-      return;
-    }
+  if (!getYouTubeVideoId(cleanUrl)) {
+    alert("Please paste a valid YouTube URL");
+    return;
+  }
+
+  try {
+    // ==========================================
+    // RESET UI
+    // ==========================================
+
+    setIsAnalyzing(true);
+    setAnalysisError("");
+    setGeneratedNotes([]);
+    setGeneratedTranscript([]);
+
+    setNotesLoading(true);
+    setTranscriptLoading(true);
+
+    // Show playable YouTube video immediately
+    setAnalyzedUrl(cleanUrl);
+    setIsPlaying(true);
+
+    console.log(
+      "Starting LectureLens analysis:",
+      cleanUrl
+    );
+
+    // ==========================================
+    // STEP 1: FETCH METADATA
+    // Metadata can run independently
+    // ==========================================
+
+    const metadataPromise = getYouTubeMetadata(
+      cleanUrl
+    );
+
+    // ==========================================
+    // STEP 2: FETCH TRANSCRIPT ONCE
+    // ==========================================
+
+    console.log(
+      "Fetching transcript once..."
+    );
+
+    let transcriptResponse: any;
 
     try {
-      setIsAnalyzing(true);
-      setAnalysisError("");
-      setGeneratedNotes([]);
-      setGeneratedTranscript([]);
-      setNotesLoading(true);
-      setTranscriptLoading(true);
+      transcriptResponse =
+        await getYouTubeTranscript(cleanUrl);
 
-      // Show the playable YouTube embed immediately.
-      setAnalyzedUrl(cleanUrl);
-      setIsPlaying(true);
-
-      // Metadata, transcript and AI notes are independent requests.
-      // Promise.allSettled prevents one failed endpoint from hiding successful results.
-      const [metadataResult, transcriptResult, notesResult] = await Promise.allSettled([
-        getYouTubeMetadata(cleanUrl),
-        getYouTubeTranscript(cleanUrl),
-        generateAINotes(cleanUrl),
-      ]);
-
-      if (metadataResult.status === "fulfilled") {
-        const metadata = metadataResult.value;
-        setVideoData(metadata?.data ?? metadata);
-      } else {
-        console.error("Metadata failed:", metadataResult.reason);
-      }
-
-      if (transcriptResult.status === "fulfilled") {
-        setGeneratedTranscript(normalizeTranscript(transcriptResult.value));
-      } else {
-        console.error("Transcript failed:", transcriptResult.reason);
-      }
-      setTranscriptLoading(false);
-
-      if (notesResult.status === "fulfilled") {
-        const realNotes = normalizeAINotes(notesResult.value);
-        console.log("REAL AI NOTES:", notesResult.value, realNotes);
-        setGeneratedNotes(realNotes);
-      } else {
-        console.error("AI notes failed:", notesResult.reason);
-      }
-      setNotesLoading(false);
-
-      const failed = [metadataResult, transcriptResult, notesResult]
-        .filter(result => result.status === "rejected").length;
-
-      if (failed === 3) {
-        setAnalysisError(
-        "Backend requests failed. Could not connect to the deployed API."
+      console.log(
+        "Transcript API response:",
+        transcriptResponse
       );
-    } else if (failed > 0) {
-        setAnalysisError(
-        "Video loaded, but one or more AI endpoints failed."
-       );
-    } 
 
-      setActiveTab("notes");
     } catch (error) {
-      console.error("Analyze failed:", error);
-      setAnalysisError(error instanceof Error ? error.message : "Failed to connect to backend");
-    } finally {
-      setIsAnalyzing(false);
-      setNotesLoading(false);
-      setTranscriptLoading(false);
-    }
-  };
+      console.error(
+        "Transcript failed:",
+        error
+      );
 
+      setTranscriptLoading(false);
+      setNotesLoading(false);
+
+      throw new Error(
+        error instanceof Error
+          ? error.message
+          : "Could not fetch transcript"
+      );
+    }
+
+    // ==========================================
+    // STEP 3: EXTRACT RAW TRANSCRIPT STRING
+    // ==========================================
+
+    const rawTranscript =
+      transcriptResponse?.transcript ??
+      transcriptResponse?.data?.transcript ??
+      transcriptResponse?.data ??
+      "";
+
+    if (
+      typeof rawTranscript !== "string" ||
+      !rawTranscript.trim()
+    ) {
+      console.error(
+        "Invalid transcript response:",
+        transcriptResponse
+      );
+
+      throw new Error(
+        "Transcript API returned no usable transcript text."
+      );
+    }
+
+    console.log(
+      "Transcript fetched successfully."
+    );
+
+    console.log(
+      "Transcript characters:",
+      rawTranscript.length
+    );
+
+    // ==========================================
+    // STEP 4: SHOW TRANSCRIPT IN UI
+    // ==========================================
+
+    setGeneratedTranscript(
+      normalizeTranscript(transcriptResponse)
+    );
+
+    setTranscriptLoading(false);
+
+    // ==========================================
+    // STEP 5: SEND SAME TRANSCRIPT TO AI NOTES
+    // NO SECOND SUPADATA FETCH
+    // ==========================================
+
+    console.log(
+      "Sending existing transcript to AI Notes..."
+    );
+
+    let notesResponse: any = null;
+
+    try {
+      notesResponse = await generateAINotes(
+        cleanUrl,
+        rawTranscript
+      );
+
+      console.log(
+        "AI Notes response:",
+        notesResponse
+      );
+
+      const realNotes =
+        normalizeAINotes(notesResponse);
+
+      console.log(
+        "Normalized AI Notes:",
+        realNotes
+      );
+
+      setGeneratedNotes(realNotes);
+
+    } catch (error) {
+      console.error(
+        "AI notes failed:",
+        error
+      );
+
+      setAnalysisError(
+        error instanceof Error
+          ? `Transcript loaded, but AI notes failed: ${error.message}`
+          : "Transcript loaded, but AI notes failed."
+      );
+    } finally {
+      setNotesLoading(false);
+    }
+
+    // ==========================================
+    // STEP 6: HANDLE METADATA RESULT
+    // ==========================================
+
+    try {
+      const metadata =
+        await metadataPromise;
+
+      console.log(
+        "Metadata response:",
+        metadata
+      );
+
+      setVideoData(
+        metadata?.data ?? metadata
+      );
+
+    } catch (error) {
+      console.error(
+        "Metadata failed:",
+        error
+      );
+
+      // Metadata failure should NOT break
+      // transcript or notes
+    }
+
+    // ==========================================
+    // FINAL UI STATE
+    // ==========================================
+
+    setActiveTab("notes");
+
+    console.log(
+      "LectureLens analysis completed."
+    );
+
+  } catch (error) {
+    console.error(
+      "Analyze failed:",
+      error
+    );
+
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Failed to connect to backend";
+
+    setAnalysisError(message);
+
+  } finally {
+    setIsAnalyzing(false);
+    setNotesLoading(false);
+    setTranscriptLoading(false);
+  }
+};
   const notesAsText = () => {
     return generatedNotes
       .map((note: any) => {
