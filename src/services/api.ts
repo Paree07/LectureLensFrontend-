@@ -1,13 +1,20 @@
 export const API_BASE_URL =
   "https://lecturelens-production-5dec.up.railway.app";
 
+
+// ==========================================
+// COMMON RESPONSE PARSER
+// ==========================================
+
 async function parseResponse(response: Response) {
   let data: any;
 
   try {
     data = await response.json();
   } catch {
-    throw new Error(`Server returned invalid response (${response.status})`);
+    throw new Error(
+      `Server returned invalid response (${response.status})`
+    );
   }
 
   if (!response.ok) {
@@ -18,30 +25,39 @@ async function parseResponse(response: Response) {
     );
   }
 
-  // Important:
-  // Backend kabhi HTTP 200 ke saath success:false bhej raha hai
+  // Backend may return HTTP 200 with success:false
   if (data?.success === false) {
-    throw new Error(data?.message || "Request failed");
+    throw new Error(
+      data?.message ||
+      data?.error ||
+      "Request failed"
+    );
   }
 
   return data;
 }
 
 
-// ==============================
+// ==========================================
 // BACKEND HEALTH CHECK
-// ==============================
+// ==========================================
+
 export async function checkBackend() {
-  const response = await fetch(`${API_BASE_URL}/health`);
+  const response = await fetch(
+    `${API_BASE_URL}/health`
+  );
 
   return parseResponse(response);
 }
 
 
-// ==============================
+// ==========================================
 // YOUTUBE METADATA
-// ==============================
-export async function getYouTubeMetadata(url: string) {
+// ==========================================
+
+export async function getYouTubeMetadata(
+  url: string
+) {
   const response = await fetch(
     `${API_BASE_URL}/api/youtube/metadata`,
     {
@@ -49,7 +65,9 @@ export async function getYouTubeMetadata(url: string) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+      }),
     }
   );
 
@@ -57,10 +75,13 @@ export async function getYouTubeMetadata(url: string) {
 }
 
 
-// ==============================
+// ==========================================
 // YOUTUBE TRANSCRIPT
-// ==============================
-export async function getYouTubeTranscript(url: string) {
+// ==========================================
+
+export async function getYouTubeTranscript(
+  url: string
+) {
   const response = await fetch(
     `${API_BASE_URL}/api/youtube/transcript`,
     {
@@ -68,7 +89,9 @@ export async function getYouTubeTranscript(url: string) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+      }),
     }
   );
 
@@ -76,10 +99,17 @@ export async function getYouTubeTranscript(url: string) {
 }
 
 
-// ==============================
+// ==========================================
 // AI NOTES
-// ==============================
-export async function generateAINotes(url: string) {
+// ==========================================
+// IMPORTANT:
+// Send the transcript already fetched by frontend.
+// Backend should NOT fetch it again.
+
+export async function generateAINotes(
+  url: string,
+  transcript: string
+) {
   const response = await fetch(
     `${API_BASE_URL}/api/ai/notes`,
     {
@@ -87,13 +117,19 @@ export async function generateAINotes(url: string) {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({ url }),
+      body: JSON.stringify({
+        url,
+        transcript,
+      }),
     }
   );
 
   const data = await parseResponse(response);
 
-  console.log("AI Notes API Response:", data);
+  console.log(
+    "AI Notes API Response:",
+    data
+  );
 
   return data;
 }
